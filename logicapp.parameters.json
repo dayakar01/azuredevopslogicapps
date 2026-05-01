@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "logicAppName": {
-      "value": "my-logic-app-dev"
+      "value": "myazuredevopslogicapp"
     },
     "location": {
       "value": "eastus"
