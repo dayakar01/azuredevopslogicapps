@@ -1,0 +1,139 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  azureSubscription: 'YOUR_SERVICE_CONNECTION_NAME'   # ← Replace this
+  resourceGroupName: 'rg-logicapp-dev'
+  location: 'eastus'
+  templateFile: 'infra/logicapp.json'
+  parametersFile: 'infra/logicapp.parameters.json'
+  deploymentName: 'logicapp-deployment-$(Build.BuildId)'
+
+stages:
+
+  # ─────────────────────────────────────────
+  # STAGE 1: Validate ARM Template
+  # ─────────────────────────────────────────
+  - stage: Validate
+    displayName: 'Validate ARM Template'
+    jobs:
+      - job: ValidateTemplate
+        displayName: 'ARM Template Validation'
+        pool:
+          vmImage: 'windows-latest'
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: 'Create Resource Group (if not exists)'
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: ps
+              scriptLocation: inlineScript
+              inlineScript: |
+                az group create `
+                  --name $(resourceGroupName) `
+                  --location $(location) `
+                  --output none
+                Write-Host "Resource group $(resourceGroupName) is ready."
+
+          - task: AzureResourceManagerTemplateDeployment@3
+            displayName: 'Validate ARM Template'
+            inputs:
+              deploymentScope: 'Resource Group'
+              azureResourceManagerConnection: $(azureSubscription)
+              subscriptionId: $(subscriptionId)
+              action: 'Create Or Update Resource Group'
+              resourceGroupName: $(resourceGroupName)
+              location: $(location)
+              templateLocation: 'Linked artifact'
+              csmFile: $(templateFile)
+              csmParametersFile: $(parametersFile)
+              deploymentMode: 'Validation'
+
+  # ─────────────────────────────────────────
+  # STAGE 2: Deploy to DEV
+  # ─────────────────────────────────────────
+  - stage: DeployDev
+    displayName: 'Deploy to DEV'
+    dependsOn: Validate
+    condition: succeeded()
+    jobs:
+      - deployment: DeployLogicApp
+        displayName: 'Deploy Logic App (DEV)'
+        pool:
+          vmImage: 'windows-latest'
+        environment: 'dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureResourceManagerTemplateDeployment@3
+                  displayName: 'Deploy ARM Template'
+                  inputs:
+                    deploymentScope: 'Resource Group'
+                    azureResourceManagerConnection: $(azureSubscription)
+                    subscriptionId: $(subscriptionId)
+                    action: 'Create Or Update Resource Group'
+                    resourceGroupName: $(resourceGroupName)
+                    location: $(location)
+                    templateLocation: 'Linked artifact'
+                    csmFile: $(templateFile)
+                    csmParametersFile: $(parametersFile)
+                    deploymentMode: 'Incremental'
+                    deploymentName: $(deploymentName)
+
+                - task: AzureCLI@2
+                  displayName: 'Get Logic App Callback URL'
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: ps
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $LOGIC_APP_NAME = az deployment group show `
+                        --resource-group $(resourceGroupName) `
+                        --name $(deploymentName) `
+                        --query "properties.parameters.logicAppName.value" `
+                        --output tsv
+
+                      Write-Host "Logic App deployed: $LOGIC_APP_NAME"
+                      Write-Host "##vso[task.setvariable variable=logicAppName]$LOGIC_APP_NAME"
+
+  # ─────────────────────────────────────────
+  # STAGE 3: Deploy to PROD (manual approval)
+  # ─────────────────────────────────────────
+  - stage: DeployProd
+    displayName: 'Deploy to PROD'
+    dependsOn: DeployDev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployLogicAppProd
+        displayName: 'Deploy Logic App (PROD)'
+        pool:
+          vmImage: 'windows-latest'
+        environment: 'prod'          # ← Add approval gate in Azure DevOps Environments
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureResourceManagerTemplateDeployment@3
+                  displayName: 'Deploy ARM Template to PROD'
+                  inputs:
+                    deploymentScope: 'Resource Group'
+                    azureResourceManagerConnection: $(azureSubscription)
+                    subscriptionId: $(subscriptionId)
+                    action: 'Create Or Update Resource Group'
+                    resourceGroupName: 'rg-logicapp-prod'
+                    location: $(location)
+                    templateLocation: 'Linked artifact'
+                    csmFile: $(templateFile)
+                    csmParametersFile: $(parametersFile)
+                    deploymentMode: 'Incremental'
+                    deploymentName: $(deploymentName)
