@@ -5,7 +5,7 @@ trigger:
       - develop
 
 variables:
-  azureSubscription: 'YOUR_SERVICE_CONNECTION_NAME'   # ← Replace this
+  azureSubscription: '771cd5c1-6b02-4169-a5cc-dc344f0e8941'   # ← Replace this
   resourceGroupName: 'rg-logicapp-dev'
   location: 'eastus'
   templateFile: 'infra/logicapp.json'
