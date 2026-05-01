@@ -6,7 +6,7 @@
       "value": "myazuredevopslogicapp"
     },
     "location": {
-      "value": "eastus"
+      "value": "North Central US"
     },
     "environment": {
       "value": "dev"
