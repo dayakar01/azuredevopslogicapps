@@ -6,8 +6,8 @@ trigger:
 
 variables:
   azureSubscription: 'dayakarazuredevops'   # ← Replace this
-  resourceGroupName: 'dayakar1'
-  location: 'eastus'
+  resourceGroupName: 'dayakar'
+  location: 'North Central US '
   templateFile: 'infra/logicapp.json'
   parametersFile: 'infra/logicapp.parameters.json'
   deploymentName: 'logicapp-deployment-$(Build.BuildId)'
